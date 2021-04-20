@@ -81,13 +81,16 @@ contract Auction {
                 }
         }
     }
-    function SubmitOrder(bool direction, uint[2] memory price, uint[29] memory priceProof,
-    uint[2] memory quantity, uint[29] memory quantityProof) public payable {
+
+    function MakeOrder(uint[2] calldata price, uint[29] calldata priceProof, uint[2] calldata quantity, uint[29] calldata quantityProof) external pure returns(Order memory) {
+        return Order(keccak256(abi.encodePacked(price)),keccak256(abi.encodePacked(price,priceProof)),
+                     keccak256(abi.encodePacked(quantity)),keccak256(abi.encodePacked(quantityProof)),0,0);
+    }
+
+    function SubmitOrder(bool direction, Order memory order) public payable {
         require(block.number < IntervalsEnd.Submit,"Invalid bidding phase");
         require(msg.value == DEPOSIT,"Invalid deposit");
-        emit orderCreated(msg.sender, direction, price, priceProof, quantity, quantityProof);
-        Order memory order = Order(keccak256(abi.encodePacked(price)),keccak256(abi.encodePacked(price,priceProof)),
-        keccak256(abi.encodePacked(quantity)),keccak256(abi.encodePacked(quantityProof)),0,0);
+        emit orderCreated(msg.sender, direction, order);
         if(direction) {
             BuyOrders[msg.sender] = order;
             Buyers.push(msg.sender);
@@ -108,14 +111,18 @@ contract Auction {
         msg.sender.transfer(DEPOSIT);
     }
 
-    function RevealOrder(bool isBuyOrder, uint[2] memory priceC1, uint[2] memory priceC2, uint[8] memory priceProof,
-     uint[2] memory quantityC1, uint[2] memory quantityC2, uint[8] memory quantityProof) public {
-         IntervalsEnd.Submit = IntervalsEnd.Submit+1;
+    function MakeReveal(uint[2] calldata priceC1, uint[2] calldata priceC2, uint[8] calldata priceProof, uint[2] calldata quantityC1, uint[2] calldata quantityC2, uint[8] calldata quantityProof)
+    external pure returns(bytes32, bytes32) {
+        return (keccak256(abi.encodePacked(priceC1,priceC2,priceProof)), keccak256(abi.encodePacked(quantityC1,quantityC2,quantityProof)));
+    }
+
+    function RevealOrder(bool isBuyOrder, bytes32 priceElGamalProof, bytes32 quantityElGamalProof) public {
+        IntervalsEnd.Submit = IntervalsEnd.Submit+1;
         require(block.number > IntervalsEnd.Submit+IntervalsEnd.Dispute && block.number < IntervalsEnd.Reveal,"Invalid reveal phase");
-        emit orderRevealed(msg.sender, isBuyOrder, priceC1, priceC2, priceProof, quantityC1, quantityC2, quantityProof);
+        emit orderRevealed(msg.sender, isBuyOrder, priceElGamalProof, quantityElGamalProof);
         Order storage order = FindOrder(msg.sender);
-        order.PriceElGamalProof = keccak256(abi.encodePacked(priceC1,priceC2,priceProof));
-        order.QuantityElGamalProof = keccak256(abi.encodePacked(quantityC1,quantityC2,quantityProof));
+        order.PriceElGamalProof = priceElGamalProof;
+        order.QuantityElGamalProof = quantityElGamalProof;
     }
 
     function DisputeRevealOrder(address owner, uint[2] memory commitment, uint[2] memory c1, uint[2] memory c2, uint[8] memory proof) public {
